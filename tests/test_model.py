@@ -2,9 +2,10 @@ import pytest
 import torch
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING
 
+from flowlm.device import resolve_device
 from flowlm.model import greedy_generate, load_text_config, load_text_model
 
-DEVICE = "cpu"
+DEVICE = resolve_device()  # $FLOWLM_DEVICE, else cpu
 
 
 def test_transformers_supports_qwen3_5():
@@ -28,6 +29,11 @@ def test_no_vision_or_mtp_modules(model_and_tokenizer):
     model, _ = model_and_tokenizer
     names = [n for n, _ in model.named_modules()]
     assert not any("visual" in n or "mtp" in n for n in names)
+
+
+def test_model_on_requested_device(model_and_tokenizer):
+    model, _ = model_and_tokenizer
+    assert model.device.type == DEVICE.type
 
 
 def test_dimensions_match_config(model_and_tokenizer):

@@ -12,6 +12,8 @@ import torch
 from transformers import AutoConfig, AutoTokenizer, PreTrainedTokenizerBase
 from transformers.models.qwen3_5 import Qwen3_5ForCausalLM, Qwen3_5TextConfig
 
+from flowlm.device import resolve_device
+
 DEFAULT_MODEL = "Qwen/Qwen3.5-0.8B-Base"
 
 
@@ -26,13 +28,16 @@ def load_text_config(name: str = DEFAULT_MODEL) -> Qwen3_5TextConfig:
 
 def load_text_model(
     name: str = DEFAULT_MODEL,
-    device: str | torch.device = "cpu",
+    device: str | torch.device | None = None,
     dtype: torch.dtype = torch.float32,
 ) -> tuple[Qwen3_5ForCausalLM, PreTrainedTokenizerBase]:
-    """Load the text-only causal LM and its tokenizer, in eval mode on ``device``."""
+    """Load the text-only causal LM and its tokenizer, in eval mode on ``device``.
+
+    ``device=None`` means ``$FLOWLM_DEVICE`` if set, else ``cpu``.
+    """
     config = load_text_config(name)
     model = Qwen3_5ForCausalLM.from_pretrained(name, config=config, dtype=dtype)
-    model.to(device).eval()
+    model.to(resolve_device(device)).eval()
     tokenizer = AutoTokenizer.from_pretrained(name)
     if not isinstance(tokenizer, PreTrainedTokenizerBase):
         raise TypeError(f"no tokenizer found for {name}")

@@ -19,8 +19,8 @@ The first load downloads ~1.75 GB from the Hugging Face Hub into `~/.cache/huggi
 Quick check (prints the config and greedy-generates 30 tokens):
 
 ```bash
-uv run python -m flowlm.inspect_model --device cpu
-# options: --device <torch device, e.g. cpu / cuda / mps>  --prompt "..."  --max-new-tokens 30
+uv run python -m flowlm.inspect_model
+# options: --device <cpu | cuda | cuda:1 | mps | ...>  --prompt "..."  --max-new-tokens 30
 ```
 
 From Python:
@@ -29,9 +29,30 @@ From Python:
 import torch
 from flowlm.model import load_text_model, greedy_generate
 
-model, tokenizer = load_text_model(device="cpu", dtype=torch.float32)
+# device defaults to $FLOWLM_DEVICE (see below); or pass device="cuda" / "mps" / ...
+model, tokenizer = load_text_model(dtype=torch.float32)
 print(greedy_generate(model, tokenizer, "The capital of France is", max_new_tokens=30))
 ```
+
+### Choosing the device
+
+Nothing auto-detects hardware. The device is, in order of priority:
+
+1. an explicit `device=` argument / `--device` flag,
+2. the `FLOWLM_DEVICE` environment variable (any string `torch.device` accepts),
+3. `FLOWLM_DEVICE` from a `.env` file,
+4. `cpu`.
+
+The easiest way to set your machine's default is a `.env` file in the repo root (it is gitignored, so each person keeps their own):
+
+```bash
+cp .env.example .env
+# then edit it, e.g.
+#   FLOWLM_DEVICE=mps    # Apple silicon
+#   FLOWLM_DEVICE=cuda   # NVIDIA GPU (or cuda:1, ...)
+```
+
+`flowlm` reads the nearest `.env` (searching upward from the current directory) when it is imported, so this applies to scripts and `uv run pytest` alike. A variable set in the shell overrides the file, e.g. a one-off `FLOWLM_DEVICE=cpu uv run pytest`. `HF_TOKEN` can go in the same file.
 
 `load_text_model` returns a `transformers` `Qwen3_5ForCausalLM` in eval mode. The input embedding and the LM head share one weight matrix, so `model.lm_head.weight is model.model.embed_tokens.weight`. Read model dimensions from `model.config` (e.g. `hidden_size`, `layer_types`) instead of hardcoding them.
 
@@ -43,7 +64,7 @@ print(greedy_generate(model, tokenizer, "The capital of France is", max_new_toke
 uv run pytest
 ```
 
-The model tests download the checkpoint on first run and take about 30 s on CPU.
+The model tests download the checkpoint on first run and run on `$FLOWLM_DEVICE` (about 25 s on CPU, 5 s on MPS).
 
 ## Before pushing
 
