@@ -1,0 +1,10 @@
+[
+  {
+    "label": "uv sync",
+    "command": "uv sync --locked"
+  },
+  {
+    "label": "pre-push checks",
+    "command": "uv run ruff check . && uv run ruff format --check . && uv run ty check"
+  }
+]
