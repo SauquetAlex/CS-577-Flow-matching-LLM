@@ -15,6 +15,7 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "pytest>=9.2.0",
     "ruff>=0.17.4",
     "ty>=0.0.99",
 ]
@@ -23,4 +24,4 @@ dev = [
 select = ["E", "F", "I", "B", "UP", "SIM", "N"]
 
 [tool.uv.build-backend]
-module-name = "flow_matching_llm"
+module-name = "flowlm"

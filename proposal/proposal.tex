@@ -1,0 +1,184 @@
+\documentclass[11pt]{article}
+
+% Change "review" to "final" to generate the final (sometimes called camera-ready) version.
+% Change to "preprint" to generate a non-anonymous version with page numbers.
+\usepackage[preprint]{acl}
+
+% Standard package includes
+\usepackage{times}
+\usepackage{latexsym}
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+% For proper rendering and hyphenation of words containing Latin characters (including in bib files)
+\usepackage[T1]{fontenc}
+% For Vietnamese characters
+% \usepackage[T5]{fontenc}
+% See https://www.latex-project.org/help/documentation/encguide.pdf for other character sets
+
+% This assumes your files are encoded as UTF8
+\usepackage[utf8]{inputenc}
+
+% This is not strictly necessary, and may be commented out,
+% but it will improve the layout of the manuscript,
+% and will typically save some space.
+\usepackage{microtype}
+
+% This is also not strictly necessary, and may be commented out.
+% However, it will improve the aesthetics of text in
+% the typewriter font.
+\usepackage{inconsolata}
+
+%Including images in your LaTeX document requires adding
+%additional package(s)
+\usepackage{graphicx}
+
+% If the title and author information does not fit in the area allocated, uncomment the following
+%
+%\setlength\titlebox{<dim>}
+%
+% and set <dim> to something 5cm or larger.
+
+\title{CS 577 Project Proposal: Flow Matching Text Generation At Scale}
+
+\author{Alexandre Sauquet\textsuperscript{$\dagger$} \and Nathan Miller\textsuperscript{$\dagger$} \\
+  Purdue University \\
+  \texttt{\{asauquet,mill3319\}@purdue.edu}}
+
+% Author information can be set in various styles:
+% For several authors from the same institution:
+% \author{Author 1 \and ... \and Author n \\
+%         Address line \\ ... \\ Address line}
+% if the names do not fit well on one line use
+%         Author 1 \\ {\bf Author 2} \\ ... \\ {\bf Author n} \\
+% For authors from different institutions:
+% \author{Author 1 \\ Address line \\  ... \\ Address line
+%         \And  ... \And
+%         Author n \\ Address line \\ ... \\ Address line}
+% To start a separate ``row'' of authors use \AND, as in
+% \author{Author 1 \\ Address line \\  ... \\ Address line
+%         \AND
+%         Author 2 \\ Address line \\ ... \\ Address line \And
+%         Author 3 \\ Address line \\ ... \\ Address line}
+
+% \author{First Author \\
+%   Affiliation / Address line 1 \\
+%   Affiliation / Address line 2 \\
+%   Affiliation / Address line 3 \\
+%   \texttt{email@domain} \\\And
+%   Second Author \\
+%   Affiliation / Address line 1 \\
+%   Affiliation / Address line 2 \\
+%   Affiliation / Address line 3 \\
+%   \texttt{email@domain} \\}
+
+% \author{
+%  \textbf{First Author\textsuperscript{1}},
+%  \textbf{Second Author\textsuperscript{1,2}},
+%  \textbf{Third T. Author\textsuperscript{1}},
+%  \textbf{Fourth Author\textsuperscript{1}},
+% \\
+%  \textbf{Fifth Author\textsuperscript{1,2}},
+%  \textbf{Sixth Author\textsuperscript{1}},
+%  \textbf{Seventh Author\textsuperscript{1}},
+%  \textbf{Eighth Author \textsuperscript{1,2,3,4}},
+% \\
+%  \textbf{Ninth Author\textsuperscript{1}},
+%  \textbf{Tenth Author\textsuperscript{1}},
+%  \textbf{Eleventh E. Author\textsuperscript{1,2,3,4,5}},
+%  \textbf{Twelfth Author\textsuperscript{1}},
+% \\
+%  \textbf{Thirteenth Author\textsuperscript{3}},
+%  \textbf{Fourteenth F. Author\textsuperscript{2,4}},
+%  \textbf{Fifteenth Author\textsuperscript{1}},
+%  \textbf{Sixteenth Author\textsuperscript{1}},
+% \\
+%  \textbf{Seventeenth S. Author\textsuperscript{4,5}},
+%  \textbf{Eighteenth Author\textsuperscript{3,4}},
+%  \textbf{Nineteenth N. Author\textsuperscript{2,5}},
+%  \textbf{Twentieth Author\textsuperscript{1}}
+% \\
+% \\
+%  \textsuperscript{1}Affiliation 1,
+%  \textsuperscript{2}Affiliation 2,
+%  \textsuperscript{3}Affiliation 3,
+%  \textsuperscript{4}Affiliation 4,
+%  \textsuperscript{5}Affiliation 5
+% \\
+%  \small{
+%    \textbf{Correspondence:} \href{mailto:email@domain}{email@domain}
+%  }
+% }
+
+\begin{document}
+\maketitle
+\begingroup
+\renewcommand\thefootnote{$\dagger$}
+\footnotetext{Equal contribution; order decided by coin flip.}
+\endgroup
+
+\section{Introduction}
+
+Autoregressive (AR) language models generate one token per forward pass, resulting in latency that grows linearly with the output length. From a language perspective, this approach prevents the model from revising previous tokens or allocating compute selectively. Diffusion language models address these issues by generating a \emph{canvas} of tokens in parallel and refining it over a small number of iterations. Google's DiffusionGemma \citep{google2026diffusiongemma} demonstrated diffusion decoding at scale (26B parameters) by converting a pretrained Gemma 4 MoE into a block-diffusion model that drafts 256-token canvases. The authors report up to  $4\times$ faster single-user generation, at some cost in quality relative to the AR parent.
+
+DiffusionGemma \citep{nie2025llada,ye2025dream} diffuses over discrete tokens (uniform-state or masked noise). \citet{lee2026flm} argue that this degrades quality in the few-step regime, where each denoising step samples every position independently from a per-token distribution. With few steps, there are too few refinement passes to repair inconsistent joint choices, and the sampler cannot coordinate correlated choices across positions. As a result, distilled discrete models degrade sharply at one or two steps.
+
+Conversely, continuous flows move the entire sequence representation along a learned velocity field (deterministically under ODE sampling), and recent small-scale studies report that continuous-flow LMs match or outperform discrete ones in generative perplexity while using fewer sampling steps \citep{lee2026flm,hu2026elf}. However, these models are small (roughly 100M--650M parameters) and trained from scratch; none start from a strong pretrained AR model.
+
+We propose to bridge the two methods: retrain a pretrained AR model (Qwen3.5-4B; \citealp{qwen2026qwen35}) to generate canvases with flow matching, where the flow lives in the model's own final hidden space: the tensor before the (tied) unembedding matrix and softmax.  Our research question is:
+
+\begin{quote}\itshape
+Can a pretrained AR LM be converted into a few-step parallel generator by flow matching in its last-layer hidden space, and how much generation quality does it trade for speed relative to the original AR model?
+\end{quote}
+
+The motivation for the hidden space is mechanistic. The final hidden state is, by construction, the representation the pretrained model has learned to map linearly to a next-token distribution; decoding is therefore free (one matrix multiply by weights we already have), and the space is shaped by the model's own semantics rather than by an external encoder. It is also where the pretrained network's computation already ends, so the denoiser only has to learn to produce these vectors in parallel rather than one at a time.
+
+\section{Related work}
+
+\subsection{Flow matching}
+Flow matching \citep{lipman2023flow,liu2023rectified} and stochastic interpolants \citep{albergo2025stochastic} learn a velocity field that transports Gaussian noise to data along a chosen path; typically the straight line $z_t = t\,x + (1-t)\,\epsilon$. \citet{li2025backtobasics} argue that when data lie on a low-dimensional manifold inside a high-dimensional space, the network should predict the clean sample $x$ rather than the velocity or noise, since only $x$ lives on the manifold. \citet{feng2026diffusibility} refine this for high-dimensional encoder latents by using the $x$-prediction to remove the network capacity required to fit the orthogonal noise component of the velocity target. \citet{hong2026alignment} show that predicting $x$ and training through a velocity-space loss amplifies gradients near $t\!\to\!1$ due to $(1-t)^{-2}$ and stabilized only under endpoint-suppressing time samplers. By computing the loss directly in $x$-space, we remove this sensitivity.
+
+\subsection{Continuous diffusion and flow language models (FLM)}
+Early continuous text diffusion added Gaussian noise to learned token embeddings \citep{li2022diffusionlm,dieleman2022cdcd,gulrajani2023plaid} or to frozen encoder latents decoded by a separate network \citep{lovelace2023ld4lg}; these lagged discrete models. Variational flow matching \citep{eijkelboom2024vfm} reframes flows on categorical data as learning a posterior over clean categories with a cross-entropy objective. FLM/FMLM \citep{lee2026flm} performs flow matching over one-hot vectors with a cross-entropy denoiser, then distills a one-step flow map that outperforms distilled discrete baselines (one-step Gen. PPL 119 vs. $\ge$ 293 on LM1B). ELF \citep{hu2026elf} performs flow matching in a frozen T5 encoder's embedding space with $x$-prediction and decodes with the same network at $t=1$, outperforming discrete DLMs with fewer steps and $\sim$10$\times$ fewer training tokens. DBTM \citep{tang2026dbtm} removes the teacher entirely with a time-independent transport map, and LangFlow \citep{chen2026langflow} uses Bregman-divergence flow matching over learned embeddings.
+
+\subsection{Discrete diffusion and AR-to-diffusion conversion}
+Masked and uniform-state diffusion \citep{sahoo2024mdlm,lou2024sedd,sahoo2025duo} dominate at scale, including 7--8B models such as LLaDA and Dream \citep{nie2025llada,ye2025dream}; Dream and DiffusionGemma are initialized from AR checkpoints. Block diffusion \citep{arriola2025block} generates canvases left-to-right with a causal KV cache across blocks, which DiffusionGemma adopts \citep{grootendorst2026visual}.
+
+\section{Proposed Approach}
+
+We retrain Qwen3.5-4B \citep{qwen2026qwen35} into a flow-matching model that fills a canvas of $K$ future positions in parallel, conditioned on the text before it. Compared to ELF \citep{hu2026elf}, the flow's state space originates from the generator itself rather than an external encoder, and we start from a pretrained 4B LM as opposed to training from scratch. With respect to DiffusionGemma, the noise is continuous rather than discrete.
+
+\subsection{Flow matching in the hidden space}
+We write the conditioning tokens as $w_{1:i}$ and reserve $X$ for flow states: $X_t \in \mathbb{R}^{K\times d}$ is the canvas at flow time $t\in[0,1]$ and $d=2560$ as the model's hidden size. $X_0\sim\mathcal{N}(0,I)$ is random noise in hidden space, $X_1$ is the target canvas, and training uses the standard linear path
+\begin{equation*}
+X_t = t\,X_1 + (1-t)\,X_0 .
+\end{equation*}
+The canvas is present in the model's last-layer hidden space, which is before the (tied) unembedding matrix $W$ and the softmax. For a training sequence $[w_{1:i};\,y_{1:K}]$, let $y_{1:K}$ be the $K$ ground-truth tokens that follow the prompt. We run the original model once and set row $j$ of $X_1$ to its final hidden state at the position preceding $y_j$, since this is the vector the AR model maps through $W$ to a distribution over $y_j$. Hidden states are standardized per channel to match the scale of the noise $X_0$.
+
+At each canvas position, we read the network's final hidden state before the LM head and train it to predict the target canvas. We define this prediction as $\hat{X}_1 = f_\theta(X_t, t, w_{1:i})$ and the network as $f_\theta$, which is trained to approximate the posterior mean $\mathbb{E}[X_1 \mid X_t, w_{1:i}]$. We predict $X_1$ rather than the velocity for two reasons. First, the pretrained model is already trained to produce final hidden states, so predicting them stays closest to the training objective. Second, $x$-prediction is better suited to high-dimensional states lying near a low-dimensional manifold \citep{li2025backtobasics,feng2026diffusibility}. For the linear path, the velocity follows exactly from this posterior mean \citep{albergo2025stochastic,lee2026flm}:
+\begin{equation*}
+v_\theta(X_t,t) = \frac{\hat{X}_1 - X_t}{1-t}.
+\end{equation*}
+
+\subsection{Model inputs and attention mask}
+The model receives three inputs: the text $w_{1:i}$, the canvas $X_t$, and the time $t$. The text $w_{1:i}$ enters through the ordinary token embeddings. At the $K$ canvas positions, we replace the output of the embedding layer with the canvas rows $X_t$. As a result, the first transformer layer takes as input $X_t$ rather than the token embeddings. This is because Qwen3.5 links its input and output embeddings, so the final hidden states are present in the input-embedding space. The time $t$ is a new input in addition to the text: a small MLP maps $t$ (expanded into sine and cosine features, as in diffusion timestep embeddings) to a vector $e(t)\in\mathbb{R}^{d}$. This is added to every canvas input, so that the first layer receives $X_t[j] + e(t)$ at canvas position $j$. The MLP's last layer is zero-initialized, so that $e(t)=0$ at the start of training and the time signal is learned gradually rather than added as a random offset. The flow is unchanged as $e(t)$ solely conditions the network and the state used to compute the velocity remains $X_t$.
+
+We anchor the attention mask at the canvas start $s=i+1$ rather than at multiples of $K$ because the prompt can have variable length. For example, with $K=3$, the prompt ``where is the'' places the canvas at positions 4--6, while ``where is the cat'' places it at 5--7. Prompt positions attend causally, exactly as in the pretrained model. From $s$ onward, the sequence is split into consecutive canvases of $K$ positions; a canvas position attends to the entire prompt, every position within its canvas, and all earlier canvases. Over the complete sequence, the mask is the causal lower triangle with a filled $K\times K$ square on the diagonal for each canvas.
+
+\subsection{Training}
+During training, $s$ is set by each example's prompt length. Noise is applied to one canvas and fed as $X_t$, while earlier canvases are kept as text. This matches inference, where previously generated canvases are finished text that serves as context. Following \citet{hong2026alignment}, we compute the regression loss directly between the model's prediction $\hat{X}_1$ and the target $X_1$. Following ELF \citep{hu2026elf}, we add a cross-entropy term through the frozen tied head:
+\begin{equation*}
+\mathcal{L} = \big\|\hat{X}_1 - X_1\big\|^2 + \lambda\,\mathrm{CE}\big(W\hat{X}_1,\, y\big),
+\end{equation*}
+with $t$ drawn from a logit-normal distribution, which concentrates training on intermediate noise levels where denoising is hardest \citep{hu2026elf}. Because our loss is computed on $\hat{X}_1$ rather than the velocity, uniform sampling is also stable \citep{hong2026alignment}, and the two are comparable. All transformer weights are updated during retraining (full fine-tuning), together with the time-based MLP. In this process, we keep the tied embedding matrix $W$ frozen to fix the $X_1$ in the hidden space and replicate the decoding map $\arg\max W\hat{X}_1$ of the pretrained model. The targets $X_1$ come from a frozen copy of the original model.
+
+\subsection{Inference}
+The text is encoded once, and its key--value cache and recurrent state are reused at every step. Starting from $X_0\sim\mathcal{N}(0,I)$, we take $N\in\{1,2,4,8,16\}$ Euler steps $X_{t+\Delta} = X_t + \Delta\, v_\theta(X_t,t)$, then decode each slot as $\arg\max W\hat{X}_1$. The finished canvas is appended as text and the next canvas begins in the following block, as in block diffusion \citep{arriola2025block} and DiffusionGemma.
+
+\section{Experimental Setup}
+
+We fine tune on OpenWebText \citep{gokaslan2019openwebtext}, the corpus on which FLM and ELF report generative perplexity \citep{lee2026flm,hu2026elf}, mixed with code from The Stack v2 \citep{lozhkov2024starcoder2} and OpenWebMath \citep{paster2024openwebmath} to limit capability loss. Evaluation prompts are random-length prefixes of held-out OpenWebText documents. Our baseline is the original autoregressive Qwen3.5-4B decoding the same prompts; we compare generative perplexity and wall-clock generation speed across step counts $N$, and test capability retention on GSM8K \citep{cobbe2021gsm8k} and HumanEval \citep{chen2021humaneval}. We implement the models in PyTorch \citep{paszke2019pytorch} with Hugging Face Transformers \citep{wolf2020transformers}, using flash-linear-attention kernels for Qwen3.5's Gated DeltaNet layers, FlexAttention for the canvas mask, and FSDP for sharding. Training runs on the GPU nodes of Purdue RCAC's Scholar cluster.
+
+\bibliography{custom}
+
+\end{document}
